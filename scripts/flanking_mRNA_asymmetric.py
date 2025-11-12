@@ -98,4 +98,3 @@ for FLANK5 in _FLANK5:
         Taka_o['mRNA'] = Taka['flanking']
         Taka_o.to_csv(path + 'flanking_asymmetric/' + str(FLANK5) + '_' + str(FLANK3) + '/Taka.csv',index=False)
 
-

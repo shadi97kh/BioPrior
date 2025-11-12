@@ -36,10 +36,55 @@ class AverageMeter(object):
     def get_average(self):
         self.avg = self.sum / (self.count + 1e-12)
         return self.avg
+    
+    
+def check_physics_compliance(siRNA_batch, predictions):
+    """Check how often high-efficacy predictions follow physics rules"""
+    compliance_stats = {
+        'pos1_U': 0,
+        'pos7_A': 0,
+        'pos19_C': 0,
+        'all_rules': 0,
+        'high_efficacy_count': 0
+    }
+    
+    batch_size = siRNA_batch.shape[0]
+    for i in range(batch_size):
+        # Check if prediction is high efficacy
+        if predictions[i] > 0.7:  # High efficacy threshold
+            compliance_stats['high_efficacy_count'] += 1
+            
+            # Extract sequence from one-hot
+            seq_onehot = siRNA_batch[i, 0, :, :4]
+            seq = []
+            for pos in range(19):
+                nt_idx = torch.argmax(seq_onehot[pos]).item()
+                seq.append(['A', 'U', 'C', 'G'][nt_idx])
+            
+            # Check individual rules
+            if seq[0] == 'U':
+                compliance_stats['pos1_U'] += 1
+            if seq[6] == 'A':
+                compliance_stats['pos7_A'] += 1
+            if seq[18] == 'C':
+                compliance_stats['pos19_C'] += 1
+            
+            # Check if all rules are followed
+            if seq[0] == 'U' and seq[6] == 'A' and seq[18] == 'C':
+                compliance_stats['all_rules'] += 1
+    
+    # Calculate percentages
+    n = compliance_stats['high_efficacy_count']
+    if n > 0:
+        for key in ['pos1_U', 'pos7_A', 'pos19_C', 'all_rules']:
+            compliance_stats[key] = compliance_stats[key] / n * 100
+    
+    return compliance_stats
 
 
-def val(model, criterion, dataloader):
+def val(model, criterion, dataloader, check_physics = False):
 	running_loss = AverageMeter()
+	physics_compliance_batch = [] #ADDED THIS
 	pred_list = []
 	pred_cls_list = []
 	label_list = []
@@ -55,6 +100,12 @@ def val(model, criterion, dataloader):
 		pred,_,_ = model(siRNA,mRNA,siRNA_FM,mRNA_FM,td)
 		_efficacy += list(pred[:,1].detach().cpu().numpy())
 		_label += list(label.float().detach().cpu().numpy())
+          
+        # ADDED physics compliance check
+		if check_physics:
+			compliance = check_physics_compliance(siRNA, pred[:,1].detach().cpu())
+			physics_compliance_batch.append(compliance)
+               
 		loss = criterion(pred[:,1],label.float()) 
 		label = np.array([int(i > 0.7) for i in label])
 		pred_cls = torch.argmax(pred, dim=-1)
@@ -79,7 +130,16 @@ def val(model, criterion, dataloader):
 	mcc=matthews_corrcoef(label,pred_cls)
 	epoch_loss = running_loss.get_average()
 	running_loss.reset()
-	return epoch_loss, acc, sen, spe, pre, rec, f1score, rocauc, prauc, mcc, label, pred, _efficacy, _label
+	if check_physics and physics_compliance_batch:
+		avg_compliance = {
+			'pos1_U': np.mean([c['pos1_U'] for c in physics_compliance_batch]),
+			'pos7_A': np.mean([c['pos7_A'] for c in physics_compliance_batch]),
+			'pos19_C': np.mean([c['pos19_C'] for c in physics_compliance_batch]),
+			'all_rules': np.mean([c['all_rules'] for c in physics_compliance_batch])
+		}
+		return epoch_loss, acc, sen, spe, pre, rec, f1score, rocauc, prauc, mcc, label, pred, _efficacy, _label, avg_compliance
+	else:
+		return epoch_loss, acc, sen, spe, pre, rec, f1score, rocauc, prauc, mcc, label, pred, _efficacy, _label
 
 def encode_sequence(seq):
     base_dict = {'A':[1,0,0,0],'U':[0,1,0,0],'C':[0,0,1,0],'G':[0,0,0,1]}
@@ -132,6 +192,11 @@ def test(Args):
 	logger.info(f"Number of val: {valid_df.shape[0]}")
 	logger.info(f"Number of test: {test_df.shape[0]}")
 	print('-----------------Start testing!-----------------')
-	val_loss, val_acc, val_sen, val_spe, val_pre, val_rec, val_f1, val_rocauc, val_prauc, val_mcc, val_label, val_pred,val_efficacy, val_label2 = val(OFmodel, criterion, valid_ds)
+	val_loss, val_acc, val_sen, val_spe, val_pre, val_rec, val_f1, val_rocauc, val_prauc, val_mcc, val_label, val_pred, val_efficacy, val_label2, physics_compliance = val(OFmodel, criterion, valid_ds, check_physics=True)
 	msg = "val_acc-%.4f,val_f1-%.4f, val_pre-%.4f, val_rec-%.4f, val_rocauc-%.4f, val_prc-%.4f,val_loss-%.4f ***" % (val_acc,val_f1,val_pre, val_rec,val_rocauc,val_prauc,val_loss)
 	logger.info(msg)
+
+	# ADD physics compliance reporting
+	physics_msg = f"Physics Compliance - Pos1-U: {physics_compliance['pos1_U']:.1f}%, Pos7-A: {physics_compliance['pos7_A']:.1f}%, Pos19-C: {physics_compliance['pos19_C']:.1f}%, All Rules: {physics_compliance['all_rules']:.1f}%"
+	logger.info(physics_msg)
+	print(physics_msg)

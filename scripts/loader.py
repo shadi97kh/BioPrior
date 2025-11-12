@@ -56,27 +56,51 @@ class data_process_loader(data.Dataset):
         index = self.df_index[index]
         label = float(self.labels[index])
         y = np.int64(self.y[index])
-        # siRNA
-        siRNA_seq = self.df.iloc[index]['siRNA']
-        siRNA_seq = [*siRNA_seq]
-        siRNA_seq = sequence_OneHot(siRNA_seq)
-        siRNA = np.expand_dims(siRNA_seq, axis=2).transpose([2, 1, 0])
-        # mRNA
-        mRNA_seq = self.df.iloc[index]['mRNA']
-        mRNA_seq = [*mRNA_seq]
-        mRNA_seq = sequence_OneHot(mRNA_seq)
-        mRNA = np.expand_dims(mRNA_seq, axis=2).transpose([2, 1, 0])
+        siRNA_seq_str = self.df.iloc[index]['siRNA']  # Keep original string
+        mRNA_seq_str = self.df.iloc[index]['mRNA']
+        
+        # siRNA encoding
+        siRNA_seq_list = [*siRNA_seq_str]
+        siRNA_seq_encoded = sequence_OneHot(siRNA_seq_list)
+        siRNA = np.expand_dims(siRNA_seq_encoded, axis=2).transpose([2, 1, 0])
+        
+        # mRNA encoding
+        mRNA_seq_list = [*mRNA_seq_str]
+        mRNA_seq_encoded = sequence_OneHot(mRNA_seq_list)
+        mRNA = np.expand_dims(mRNA_seq_encoded, axis=2).transpose([2, 1, 0])
+        
         # siRNA RNA-FM
-        siRNA_seq = self.df.iloc[index]['siRNA']
-        siRNA_FM = np.load(self.root + '/RNAFM/' + self.dataset + '_siRNA/representations/'+ str(self.siRNA_ref[siRNA_seq]) + '.npy')
+        siRNA_FM = np.load(self.root + '/RNAFM/' + self.dataset + '_siRNA/representations/'+ str(self.siRNA_ref[siRNA_seq_str]) + '.npy')
+        
         # mRNA RNA-FM
-        mRNA_seq = self.df.iloc[index]['mRNA']
-        mRNA_FM = np.load(self.root + '/RNAFM/' + self.dataset + '_mRNA/representations/' + str(self.mRNA_ref[mRNA_seq])+'.npy') 
+        mRNA_FM = np.load(self.root + '/RNAFM/' + self.dataset + '_mRNA/representations/' + str(self.mRNA_ref[mRNA_seq_str])+'.npy')
+        
+        # Original td features
         td = self.df.iloc[index]['td']
-        td = torch.tensor([float(i) for i in td.split(',')])
-        return  siRNA, mRNA, siRNA_FM, mRNA_FM, label, y, td
-
-
+        td_list = [float(i) for i in td.split(',')]
+        
+        # Physics features - USE ORIGINAL STRING
+        seed_region = siRNA_seq_str[1:8]
+        td_list.append(sum(1 for nt in seed_region if nt in 'AU') / 7)
+        td_list.append(1.0 if seed_region[0] == 'U' else 0.0)
+        td_list.append(1.0 if seed_region[-1] == 'A' else 0.0)
+        td_list.append(1.0 if 'UGUG' in seed_region else 0.0)
+        td_list.append(1.0 if siRNA_seq_str[0] == 'U' else 0.0)
+        td_list.append(1.0 if siRNA_seq_str[6] == 'A' else 0.0)
+        td_list.append(1.0 if siRNA_seq_str[9:11] == 'UA' else 0.0)
+        td_list.append(1.0 if siRNA_seq_str[18] == 'C' else 0.0)
+        
+        # Thermodynamic asymmetry
+        five_prime_gc = sum(1 for nt in siRNA_seq_str[:4] if nt in 'GC')
+        three_prime_gc = sum(1 for nt in siRNA_seq_str[-4:] if nt in 'GC')
+        td_list.append((five_prime_gc - three_prime_gc + 4) / 8)
+        
+        # Toxic motifs
+        td_list.append(-1.0 if 'GGGG' in siRNA_seq_str else 0.0)
+        td_list.append(-1.0 if 'CCCC' in siRNA_seq_str else 0.0)
+        
+        td = torch.tensor(td_list)
+        return siRNA, mRNA, siRNA_FM, mRNA_FM, label, y, td
 
 
 class data_process_loader_infer(data.Dataset):

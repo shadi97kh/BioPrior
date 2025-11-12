@@ -189,6 +189,27 @@ class siRNA_Encoder(nn.Module):
         self.maxpool = nn.MaxPool1d(kernel_size = 2)
         self.biLSTM = nn.LSTM(69,lstm_dim,2,bidirectional = True) # 68
         self.encoder = Encoder(vocab_size,19,lstm_dim*2,embedding_dim,n_head,n_layers)
+        self.position_weights = nn.Parameter(torch.tensor([
+            1.25,   # Position 1: 25% effect size → highest weight
+            1.076,  # Position 2: 7.6% effect size
+            1.089,  # Position 3: 8.9% effect size  
+            1.064,  # Position 4: 6.4% effect size
+            1.061,  # Position 5: 6.1% effect size
+            1.082,  # Position 6: 8.2% effect size
+            1.123,  # Position 7: 12.3% effect size → second highest
+            1.05,   # Position 8: 5% (baseline)
+            1.05,   # Position 9: 5% (baseline)
+            1.081,  # Position 10: 8.1% effect size
+            1.05,   # Position 11: 5% (baseline)
+            1.05,   # Position 12: 5% (baseline)
+            1.097,  # Position 13: 9.7% effect size
+            1.054,  # Position 14: 5.4% effect size
+            1.05,   # Position 15: 5% (baseline)
+            1.077,  # Position 16: 7.7% effect size
+            1.05,   # Position 17: 5% (baseline)
+            1.075,  # Position 18: 7.5% effect size
+            1.138   # Position 19: 13.8% effect size → third highest
+        ], dtype=torch.float32).to(device))
 
     def forward(self, x):
         x = x.float() # 16,1,19,5
@@ -203,8 +224,11 @@ class siRNA_Encoder(nn.Module):
         x, _ = self.biLSTM(x) # 16,19,64
         x = self.relu(x) # 16,19,64
         x = self.dropout(x) # 16,19,64 #######
+        x = x * self.position_weights.unsqueeze(0).unsqueeze(-1)
         x, attention = self.encoder(x,src_mask = None) # 16,19,64
         return x, attention
+    
+            
 
 class mRNA_Encoder(nn.Module):
     def __init__(self, vocab_size, embedding_dim, lstm_dim, n_head, n_layers, lm1,lm2):
@@ -241,7 +265,7 @@ class Oligo(nn.Module):
         self.siRNA_avgpool = nn.AvgPool2d((19, 5))
         self.mRNA_avgpool = nn.AvgPool2d((19 + lm1 + lm2, 5))
         self.classifier = nn.Sequential(
-            nn.Linear(1216 + (19 + lm1 + lm2 - 4) * 64 + 256 + 24,256),
+            nn.Linear(1216 + (19 + lm1 + lm2 - 4) * 64 + 256 + 35, 256),  # 36 instead of 24 for physics features
             nn.ReLU(),
             nn.Dropout(0.02),
             nn.Linear(256, 64),
