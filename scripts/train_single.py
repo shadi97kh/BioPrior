@@ -1,4 +1,7 @@
 import os
+import sys
+# Add project root to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import sklearn
 import random
 import pickle as pkl
@@ -119,13 +122,13 @@ def train_single(Args):
 	params = dict(
 		data_root=Args.path,
 		save_dir=Args.output_dir,
-		dataset=Args.datasets[1],
+		dataset=Args.datasets[0],
 		batch_size=Args.batch_size
 	)
 	logger = TrainLogger(params)
 	dataset = pd.read_csv(Args.path + Args.datasets[0] + '.csv', dtype=str) 
 	dataset = shuffle_dataset(dataset, Args.seed)
-	test_df = pd.read_csv(Args.path + Args.datasets[1] + '.csv', dtype=str)
+	test_df = pd.read_csv(Args.path + Args.datasets[0] + '.csv', dtype=str)
 	for i_fold in range(Args.kfold):
 		logger.info('*' * 50 + 'No.' + str(i_fold) + '-fold' + '*' * 50)
 		train_df, valid_df = get_kfold_data_2(i_fold, dataset, Args.kfold)
@@ -135,7 +138,7 @@ def train_single(Args):
 				'drop_last': False}
 		train_ds = DataLoader(data_process_loader(train_df.index.values, train_df.label.values,train_df.y.values, train_df, Args.datasets[0],Args.path), **params)
 		valid_ds = DataLoader(data_process_loader(valid_df.index.values, valid_df.label.values,valid_df.y.values, valid_df, Args.datasets[0],Args.path),**params)
-		test_ds = DataLoader(data_process_loader(test_df.index.values, test_df.label.values,test_df.y.values, test_df, Args.datasets[1],Args.path), **params)
+		test_ds = DataLoader(data_process_loader(test_df.index.values, test_df.label.values,test_df.y.values, test_df, Args.datasets[0],Args.path), **params)
 		OFmodel = Oligo(vocab_size = Args.vocab_size, embedding_dim = Args.embedding_dim, lstm_dim = Args.lstm_dim,  n_head = Args.n_head, n_layers = Args.n_layers, lm1 = Args.lm1, lm2 = Args.lm2).to(device)
 		if Args.resume is not None:
 			OFmodel.load_state_dict(torch.load(Args.resume,map_location=device))
@@ -180,4 +183,3 @@ def train_single(Args):
 			logger.info(msg)
 			if epoch - best_epoch > tolerence_epoch:
 				break
-
