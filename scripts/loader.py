@@ -6,6 +6,14 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import LabelEncoder
 import torch
 
+TD_MEAN = None
+TD_STD = None
+
+def set_td_stats(mean, std):
+    global TD_MEAN, TD_STD
+    TD_MEAN = np.array(mean, dtype=np.float32)
+    TD_STD  = np.array(std, dtype=np.float32)
+
 nucleic_char = ['A', 'U', 'C', 'G', 'X'] # 
 structure_char = ['.', '(', ')']
 
@@ -96,8 +104,13 @@ class data_process_loader(data.Dataset):
         td_list.append((five_prime_gc - three_prime_gc + 4) / 8)
         
         # Toxic motifs
-        td_list.append(-1.0 if 'GGGG' in siRNA_seq_str else 0.0)
-        td_list.append(-1.0 if 'CCCC' in siRNA_seq_str else 0.0)
+        td_list.append(1.0 if 'GGGG' in siRNA_seq_str else 0.0)
+        td_list.append(1.0 if 'CCCC' in siRNA_seq_str else 0.0)
+
+        # standardize if stats are set
+        if TD_MEAN is not None and TD_STD is not None and len(td_list) == len(TD_MEAN):
+            td_arr = (np.array(td_list, dtype=np.float32) - TD_MEAN) / (TD_STD + 1e-8)
+            td_list = td_arr.tolist()
         
         td = torch.tensor(td_list)
         return siRNA, mRNA, siRNA_FM, mRNA_FM, label, y, td
