@@ -7,7 +7,7 @@
 
 BioPrior extends [OligoFormer](https://github.com/lulab/OligoFormer) with biology-informed regularization and a perturbation-based saliency validation protocol for siRNA efficacy prediction. We introduce a **pre-synthesis gate** that tests whether gradient-based saliency maps faithfully identify model-sensitive positions before they are used to guide sequence design decisions.
 
-📄 **Paper:** [arXiv (coming soon)]()
+📄 **Paper:** [arXiv](https://arxiv.org/abs/2602.10152)
 👥 **Authors:** Zahra Khodagholi, Niloofar Yousefi — University of Central Florida
 
 ![Pipeline Overview](figures/pipeline_overview.png)
