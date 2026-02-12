@@ -282,10 +282,12 @@ This project builds on [OligoFormer](https://github.com/lulab/OligoFormer) by Ba
 If you use BioPrior in your research, please cite:
 
 ```bibtex
-@article{khodagholi2026bioprior,
-  title={Validating Interpretability in siRNA Efficacy Prediction: A Perturbation-Based, Dataset-Aware Protocol},
+@article{khodagholi2026validating,
+  title={Validating Interpretability in {siRNA} Efficacy Prediction: A Perturbation-Based, Dataset-Aware Protocol},
   author={Khodagholi, Zahra and Yousefi, Niloofar},
-  year={2026}
+  journal={arXiv preprint arXiv:2602.10152},
+  year={2026},
+  note={arXiv:2602.10152}
 }
 ```
 
