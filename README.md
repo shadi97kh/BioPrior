@@ -41,7 +41,7 @@ We evaluate on four benchmark groups spanning distinct experimental protocols an
 | [Takayuki](https://academic.oup.com/nar/article/35/4/e27/1079934) | 702 | HeLa | **Taka** |
 | [Shabalina](https://pubmed.ncbi.nlm.nih.gov/16357112/) | 653 | Multiple | **Shabalina** |
 
-Following [OligoFormer](https://github.com/lulab/OligoFormer), we organize datasets into four groups: **Hu** (Huesken), **Mix** (7 studies, 581 siRNAs after deduplication), **Taka** (Takayuki), and **Shabalina**. Cross-dataset transfer experiments reveal that Taka (luciferase reporter assay, single target) is systematically incompatible with the other three groups.
+Following [OligoFormer](https://github.com/lulab/OligoFormer), we organize the ten studies above into four evaluation groups: **Hu** (Huesken alone), **Mix** (the seven studies labeled *Mix* in the table — Reynolds, Vickers, Harborth, Ui-Tei, Khvorova, Hsieh, Amarzguioui — totaling 581 siRNAs after deduplication), **Taka** (Takayuki), and **Shabalina**. Cross-dataset transfer experiments reveal that Taka (luciferase reporter assay, single target) is systematically incompatible with the other three groups.
 
 ## Installation
 
@@ -148,49 +148,42 @@ python scripts/main.py --datasets Taka Hu --val_mode inter --epoch 300 --early_s
 
 ### Ablation: Baseline without BioPrior
 
+The `--ablation` flag controls the regularization mode: `baseline` (no physics), `mechanistic` (default, full BioPrior), `full`, or `neutral`.
+
 ```bash
 # Disable biology-informed regularization
-python scripts/main.py --datasets Hu --val_mode intra --epoch 300 --early_stopping 50 --cuda 0 --no_bioprior
+python scripts/main.py --datasets Hu --val_mode intra --epoch 300 --early_stopping 50 --cuda 0 --ablation baseline
 ```
 
 ### Saliency Faithfulness Validation
 
-Run the perturbation-based faithfulness test on a trained model:
+> **Note:** The `model/` directory is not committed. Train a model first (commands above) — checkpoints will be written to `./model/best_model.pth` by default — then point `--model_path` at the resulting file.
+
+Run the perturbation-based faithfulness test on a trained model. Each run reports top-k effect, bottom-k effect, and the nucleotide-matched random baseline — the bottom-k and matched-baseline contrasts are computed automatically as built-in negative controls.
 
 ```bash
 # Intra-dataset faithfulness (Hu, default k=3, 50 matched samples)
-python scripts/perturbation_test.py --dataset Hu --model_path model/best_model.pt --top_k 3 --matched_samples 50 --cuda 0
+python scripts/perturbation_test.py --dataset Hu --model_path model/best_model.pth --k_positions 3 --n_matched 50 --cuda 0
 
 # Vary k for sensitivity analysis
-python scripts/perturbation_test.py --dataset Hu --model_path model/best_model.pt --top_k 1 --cuda 0
-python scripts/perturbation_test.py --dataset Hu --model_path model/best_model.pt --top_k 5 --cuda 0
+python scripts/perturbation_test.py --dataset Hu --model_path model/best_model.pth --k_positions 1 --cuda 0
+python scripts/perturbation_test.py --dataset Hu --model_path model/best_model.pth --k_positions 5 --cuda 0
 
 # Cross-dataset transfer faithfulness (train on Hu, test saliency on Taka)
-python scripts/perturbation_test.py --dataset Taka --model_path model/hu_best_model.pt --top_k 3 --cuda 0
+python scripts/perturbation_test.py --dataset Taka --model_path model/hu_best_model.pth --k_positions 3 --cuda 0
 
 # Inverted saliency demo (train on Taka, test saliency on Hu)
-python scripts/perturbation_test.py --dataset Hu --model_path model/taka_best_model.pt --top_k 3 --cuda 0
-```
-
-### Negative Control Validation
-
-```bash
-# Randomized weights (Adebayo-style sanity check)
-python scripts/perturbation_test.py --dataset Hu --model_path model/best_model.pt --randomize_weights --cuda 0
-
-# Shuffled saliency
-python scripts/perturbation_test.py --dataset Hu --model_path model/best_model.pt --shuffle_saliency --cuda 0
-
-# Bottom-k positions (should fail)
-python scripts/perturbation_test.py --dataset Hu --model_path model/best_model.pt --bottom_k --cuda 0
+python scripts/perturbation_test.py --dataset Hu --model_path model/taka_best_model.pth --k_positions 3 --cuda 0
 ```
 
 ### Saliency Visualization
 
 ```bash
-# Generate saliency maps and position importance plots
-python scripts/create_saliency.py --dataset Hu --model_path model/best_model.pt --cuda 0
+# Generate saliency maps and position-importance plots
+python scripts/saliency_analysis/saliency_maps.py
 ```
+
+Additional analyses live in [scripts/saliency_analysis/](scripts/saliency_analysis/) (5'-end swap experiment, similarity analyses, etc.).
 
 ### Model Inference on New Sequences
 
@@ -245,33 +238,33 @@ BioPrior/
 │   ├── Hu.csv                          # Huesken dataset (2,431 siRNAs)
 │   ├── Mix.csv                         # Mix dataset (581 siRNAs, 7 studies)
 │   ├── Taka.csv                        # Katoh/Takayuki dataset (702 siRNAs)
-│   └── Shabalina.csv                   # Shabalina dataset (653 siRNAs)
+│   ├── Shabalina.csv                   # Shabalina dataset (653 siRNAs)
+│   ├── example.fa                      # Example mRNA fasta
+│   └── example_siRNA.fa                # Example siRNA fasta
 ├── figures/                            # Paper figures
-├── model/                              # Saved model weights
-├── off-target/                         # Off-target prediction pipeline
 ├── scripts/
 │   ├── main.py                         # Training and evaluation entry point
+│   ├── train.py / train_single.py      # Training loops (k-fold and single-split)
+│   ├── test.py  / test_single.py       # Evaluation entry points
 │   ├── model.py                        # Model architecture (Conv-BiLSTM-Transformer)
 │   ├── learnable_physics_loss.py       # BioPrior regularization module
-│   ├── differential_physics_loss.py    # Differentiable constraint losses
 │   ├── perturbation_test.py            # Saliency faithfulness validation
-│   ├── create_saliency.py              # Saliency map visualization
-│   ├── loader.py                       # Dataset loading and preprocessing
-│   ├── loader_infer.py                 # Inference data loader
+│   ├── saliency_analysis/              # Saliency maps + downstream analyses
+│   ├── loader.py / loader_infer.py     # Dataset loading and preprocessing
 │   ├── infer.py                        # Inference on new sequences
 │   ├── metrics.py                      # Evaluation metrics
-│   ├── logger.py                       # Training logger
-│   ├── diagnostic.py                   # Model diagnostic utilities
-│   ├── encoding_diagnostic.py          # Input encoding checks
+│   ├── logger.py / train_logger.py     # Training loggers
 │   ├── flanking_mRNA_asymmetric.py     # Asymmetric mRNA context
 │   ├── flanking_mRNA_symmetric.py      # Symmetric mRNA context
 │   ├── mismatch.py                     # Mismatch handling
-│   ├── physics_cache.py                # Thermodynamic feature caching
-│   ├── saliency_analysis/              # Saliency analysis scripts
-│   └── metrics_plots/                  # Plotting utilities
+│   ├── TD_calculation.ipynb            # Thermodynamic-feature notebook
+│   └── RNA-FM-features.sh              # RNA-FM feature generation
+├── environment.yml
 ├── requirements.txt
 └── README.md
 ```
+
+> Trained checkpoints are written to `./model/` and off-target reference files (if you enable `--off_target`) are expected under `./off-target/ref/`. Neither directory is committed.
 
 ## Acknowledgments
 
